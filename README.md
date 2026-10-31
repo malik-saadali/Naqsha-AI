@@ -198,7 +198,7 @@ demo/            demo photos, voice notes and seed_demo.py
 
 ## ☁️ Deploy on Vercel (free)
 
-The repo is ready for Vercel: `vercel.json` sends every request to `api/index.py`, which runs the FastAPI app.
+The repo is ready for Vercel: Vercel's FastAPI preset runs the `app` from `index.py` in the project root.
 
 1. On vercel.com, click **Add New → Project** and import this GitHub repo. Leave every build setting at its default and click **Deploy**.
 2. In the project, open **Settings → Environment Variables** and add `GROQ_API_KEY` (your Groq key). Optional: `TELEGRAM_BOT_TOKEN`, so the site can send Telegram alerts and team tasks.
