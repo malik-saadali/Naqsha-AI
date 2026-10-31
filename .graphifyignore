@@ -1,0 +1,6 @@
+# third-party library and media, not our code
+frontend/vendor/
+demo/photos/
+demo/voice/
+data/
+graphify-out/

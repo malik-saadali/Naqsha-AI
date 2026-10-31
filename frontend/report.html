@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ur">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report a hazard · Naqsha AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+<style>
+body{margin:0 auto;background:#f1f3f4;color:#202124;font:15px/1.5 Inter,sans-serif;padding:18px;max-width:520px}
+h1{font-size:22px;margin:4px 0}.ur{font-family:'Noto Nastaliq Urdu',serif;direction:rtl;line-height:2.1}
+.card{background:#fff;border-radius:16px;padding:16px;margin-top:12px;box-shadow:0 1px 2px rgba(60,64,67,.3),0 2px 6px 2px rgba(60,64,67,.15)}
+button,label.big{display:block;width:100%;padding:16px;border-radius:28px;border:0;font:600 17px Inter;margin-top:10px;cursor:pointer;text-align:center;box-sizing:border-box}
+.cam{background:#e8f0fe;color:#1558b0;border:2px dashed #8ab4f8}.rec{background:#f1f3f4;color:#202124}.rec.on{background:#d93025;color:#fff}
+.send{background:#1a73e8;color:#fff;box-shadow:0 1px 3px rgba(26,115,232,.5)}.muted{color:#5f6368;font-size:13px}
+textarea{width:100%;box-sizing:border-box;background:#fff;border:1px solid #dadce0;color:#202124;border-radius:12px;padding:10px;font:inherit;margin-top:10px}
+img{max-width:100%;border-radius:12px;margin-top:8px}.ok{color:#188038}.bad{color:#d93025}
+</style>
+</head>
+<body>
+<h1>⚠️ Report a hazard</h1>
+<div class="ur">لینڈ سلائیڈ، سیلاب یا سڑک بند ہونے کی اطلاع دیں</div>
+<div class="card">
+  <label class="big cam">📷 Take / choose photo · تصویر<input id="img" type="file" accept="image/*" capture="environment" hidden></label>
+  <img id="prev" hidden>
+  <button id="rec" class="rec">🎤 Record voice note · آواز</button>
+  <div id="recState" class="muted"></div>
+  <textarea id="desc" rows="2" placeholder="Optional: what do you see? / کیا دیکھا؟"></textarea>
+  <div id="loc" class="muted">📍 Getting location…</div>
+  <button id="send" class="send">Send report · بھیجیں</button>
+  <div id="out"></div>
+</div>
+<p class="muted">Emergency: Rescue 1122 · Edhi 115 · Police 15. Reports are saved on your phone if there is no signal and sent when it returns.</p>
+<script>
+let loc = null, audio = null, recorder = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+navigator.geolocation && navigator.geolocation.getCurrentPosition(p => { loc = p.coords; $('#loc').textContent = `📍 ${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`; },
+  () => $('#loc').textContent = '📍 Location unavailable (photo GPS will be used if present)', {enableHighAccuracy: true, timeout: 10000});
+$('#img').onchange = e => { const f = e.target.files[0]; if (f) { $('#prev').src = URL.createObjectURL(f); $('#prev').hidden = false; } };
+$('#rec').onclick = async () => {
+  if (recorder) { recorder.stop(); return; }
+  const stream = await navigator.mediaDevices.getUserMedia({audio: true}); const chunks = [];
+  recorder = new MediaRecorder(stream); recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); audio = new Blob(chunks, {type: recorder.mimeType || 'audio/webm'}); recorder = null;
+    $('#rec').classList.remove('on'); $('#rec').textContent = '🎤 Re-record'; $('#recState').textContent = '✓ Voice note ready'; };
+  recorder.start(); $('#rec').classList.add('on'); $('#rec').textContent = '⏹ Stop';
+};
+// Offline queue: keep unsent reports in IndexedDB and retry when online
+function idb() { return new Promise((res, rej) => { const r = indexedDB.open('naqsha', 1); r.onupgradeneeded = () => r.result.createObjectStore('q', {autoIncrement: true}); r.onsuccess = () => res(r.result); r.onerror = rej; }); }
+async function queue(item) { const db = await idb(); db.transaction('q', 'readwrite').objectStore('q').add(item); }
+async function flush() {
+  const db = await idb(); const store = db.transaction('q', 'readwrite').objectStore('q');
+  const all = await new Promise(r => { const out = []; store.openCursor().onsuccess = e => { const c = e.target.result; if (c) { out.push([c.key, c.value]); c.continue(); } else r(out); }; });
+  for (const [k, v] of all) { try { await send(v); const d = await idb(); d.transaction('q', 'readwrite').objectStore('q').delete(k); $('#out').innerHTML += '<p class="ok">✓ Queued report sent</p>'; } catch (e) { break; } }
+}
+async function send(item) {
+  const fd = new FormData();
+  if (item.image) fd.append('image', item.image, 'photo.jpg');
+  if (item.audio) fd.append('audio', item.audio, 'voice.webm');
+  if (item.lat != null) { fd.append('lat', item.lat); fd.append('lon', item.lon); }
+  fd.append('description', item.desc || ''); fd.append('source', 'mobile');
+  const r = await fetch('/api/report', {method: 'POST', body: fd}); const j = await r.json();
+  if (!r.ok) throw Object.assign(new Error(j.detail || 'error'), {server: true}); return j;
+}
+async function shrink(file) {  // resize photo before upload for weak connections
+  if (!file) return null;
+  const img = await createImageBitmap(file); const s = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = img.width * s; c.height = img.height * s; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+}
+$('#send').onclick = async () => {
+  const f = $('#img').files[0];
+  // keep the original if it may carry GPS and we have no device location
+  const image = loc ? await shrink(f) : f;
+  const item = {image, audio, desc: $('#desc').value, lat: loc ? loc.latitude : null, lon: loc ? loc.longitude : null};
+  $('#out').innerHTML = '<p class="muted">Sending… AI is analysing the photo</p>';
+  try {
+    const h = await send(item);
+    $('#out').innerHTML = `<p class="ok">✓ Report received · شکریہ</p><p>Risk: <b>${h.risk_score}/100 (${esc(h.risk_level)})</b></p><p>${esc(h.summary_en)}</p><p class="ur">${esc(h.summary_ur)}</p>`;
+  } catch (e) {
+    if (e.server) { $('#out').innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
+    await queue(item); $('#out').innerHTML = '<p class="bad">No signal — report saved on this phone and will be sent automatically.</p>';
+  }
+};
+window.addEventListener('online', flush); flush();
+</script>
+</body>
+</html>
