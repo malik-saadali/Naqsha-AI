@@ -196,6 +196,21 @@ bot.py           Telegram bot (talks to the API on localhost:8000)
 demo/            demo photos, voice notes and seed_demo.py
 ```
 
+## ☁️ Deploy on Vercel (free)
+
+The repo is ready for Vercel: `vercel.json` sends every request to `api/index.py`, which runs the FastAPI app.
+
+1. On vercel.com, click **Add New → Project** and import this GitHub repo. Leave every build setting at its default and click **Deploy**.
+2. In the project, open **Settings → Environment Variables** and add `GROQ_API_KEY` (your Groq key). Optional: `TELEGRAM_BOT_TOKEN`, so the site can send Telegram alerts and team tasks.
+3. Open **Deployments**, then **⋯ → Redeploy** so the keys are picked up.
+
+What is different on Vercel (serverless):
+- **Demo data is built in.** Every new server instance starts from `demo/snapshot/` (8 analysed hazards with photos, teams, check-ins).
+- **New reports are temporary.** Vercel only allows writing to `/tmp`, so reports made on the live site last while that instance is warm and disappear later. For permanent storage, run it on a normal server (`START_NAQSHA.bat`, Render, Railway or a VPS), where everything is saved in `data/naqsha.db`.
+- **No WebSockets.** The dashboard switches to *Auto-refresh* (every 20 s) automatically.
+- **Telegram bot.** It needs a program that is always running, so run `python bot.py` on your own PC with `API_URL` set to your Vercel address (e.g. `set API_URL=https://naqsha-ai.vercel.app` in the same window first). The bot then uses the live site.
+- Links in Telegram messages use the Vercel address automatically (or set `PUBLIC_URL`).
+
 ## Run it by hand (any OS)
 
 ```bash

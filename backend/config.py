@@ -1,12 +1,19 @@
 """Configuration loaded from environment variables or a .env file in the project root."""
 import os
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("NAQSHA_DATA_DIR", ROOT / "data"))
+# Serverless hosts (Vercel) only allow writing to /tmp, and /tmp starts empty on every cold start
+SERVERLESS = bool(os.getenv("VERCEL") or os.getenv("NAQSHA_SERVERLESS"))
+DATA_DIR = Path(os.getenv("NAQSHA_DATA_DIR") or ("/tmp/naqsha" if SERVERLESS else ROOT / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 FRONTEND_DIR = ROOT / "frontend"
+SNAPSHOT_DIR = ROOT / "demo" / "snapshot"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+if SERVERLESS and not (DATA_DIR / "naqsha.db").exists() and (SNAPSHOT_DIR / "naqsha.db").exists():
+    shutil.copy(SNAPSHOT_DIR / "naqsha.db", DATA_DIR / "naqsha.db")  # start every instance with the demo data
+    shutil.copytree(SNAPSHOT_DIR / "media", UPLOAD_DIR, dirs_exist_ok=True)
 
 
 def _load_env_file():
@@ -37,7 +44,8 @@ OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
 LOCAL_WHISPER_SIZE = os.getenv("LOCAL_WHISPER_SIZE", "small")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-PUBLIC_URL = os.getenv("PUBLIC_URL", "http://localhost:8000").rstrip("/")
+_vercel_host = os.getenv("VERCEL_PROJECT_PRODUCTION_URL") or os.getenv("VERCEL_URL")
+PUBLIC_URL = os.getenv("PUBLIC_URL", f"https://{_vercel_host}" if _vercel_host else "http://localhost:8000").rstrip("/")
 
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org/search")

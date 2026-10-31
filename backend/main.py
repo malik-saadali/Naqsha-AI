@@ -66,7 +66,8 @@ class ProviderIn(BaseModel):
 
 @app.get("/api/settings")
 def get_settings():
-    return {**llm.models(), "telegram": bool(config.TELEGRAM_BOT_TOKEN), "public_url": config.PUBLIC_URL}
+    return {**llm.models(), "telegram": bool(config.TELEGRAM_BOT_TOKEN), "public_url": config.PUBLIC_URL,
+            "websocket": not config.SERVERLESS, "ai_key": bool(config.GROQ_API_KEY)}
 
 
 @app.post("/api/settings")

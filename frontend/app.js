@@ -257,6 +257,8 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => openTab
 async function loadSettings() {
   const s = await api('/api/settings'); $('#provider').value = s.provider;
   $('#provider').title = `text: ${s.text} · vision: ${s.vision} · speech: ${s.speech}`;
+  if (s.websocket === false) startPolling(); else connectWS();
+  if (s.provider === 'groq' && s.ai_key === false) toast('AI is off: GROQ_API_KEY is not set on the server (see README → Deploy).', '#d93025', 15000);
 }
 $('#provider').onchange = async (e) => {
   const s = await post('/api/settings', {provider: e.target.value});
@@ -577,7 +579,27 @@ function connectWS() {
       if (m.data.status === 'help' && m.data.lat) { toast(`🆘 ${m.data.name || 'Someone'} needs help`); L.circleMarker([m.data.lat, m.data.lon], {radius: 9, color: '#fff', fillColor: '#d93025', fillOpacity: 1}).bindPopup('🆘 Help request').addTo(hazLayer); }
     } else if (m.type === 'notified') feed(`📲 Alert sent to ${m.data.subscribers} subscriber(s) near hazard #${m.data.hazard_id}`);
   };
-  ws.onclose = () => { $('#live').classList.remove('on'); setTimeout(connectWS, 2000); };
+  let opened = false;
+  ws.addEventListener('open', () => { opened = true; wsFails = 0; });
+  ws.onclose = () => {
+    $('#live').classList.remove('on');
+    if (!opened && ++wsFails >= 3) return startPolling();  // host without WebSockets: refresh instead
+    setTimeout(connectWS, 2000);
+  };
+}
+let wsFails = 0, polling = null;
+function startPolling() {
+  if (polling) return;
+  $('#live').classList.add('on'); $('#live').lastChild.textContent = 'Auto-refresh'; $('#live').title = 'Refreshes every 20 seconds';
+  polling = setInterval(async () => {
+    try {
+      const hs = await api('/api/hazards'); const ids = new Set(hs.map(h => h.id));
+      hs.forEach(h => { const old = state.hazards[h.id]; if (!old) { feed(`New hazard #${h.id} · ${esc(h.hazard_type)} · risk ${h.risk_score}`); beep(); }
+        if (!old || old.updated_at !== h.updated_at) upsertHazard(h); });
+      Object.keys(state.hazards).filter(id => !ids.has(+id)).forEach(id => upsertHazard({...state.hazards[id], status: 'Resolved'}));
+      loadStats();
+    } catch (e) {}
+  }, 20000);
 }
 
 document.addEventListener('keydown', (e) => {
@@ -585,4 +607,4 @@ document.addEventListener('keydown', (e) => {
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $('#mq').focus(); }
 });
 
-loadSettings(); loadStats(); loadHazards(); loadTeams(); renderLayers(); connectWS();
+loadSettings(); loadStats(); loadHazards(); loadTeams(); renderLayers();

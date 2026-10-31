@@ -1,0 +1,7 @@
+.env
+data/
+demo/photos/
+demo/voice/
+graphify-out/cache/
+.claude/
+__pycache__/
